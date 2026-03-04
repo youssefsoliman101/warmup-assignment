@@ -141,13 +141,13 @@ function addShiftRecord(textFile, shiftObj) {
 
     records.push(newRecord);
 
-    // 🔥 ORDERING (DriverID, then Date)
-    records.sort((a, b) => {
-        if (a[0] !== b[0]) {
-            return a[0].localeCompare(b[0]);
-        }
-        return a[2].localeCompare(b[2]);
-    });
+  records.sort((a, b) => {
+    if (a[0] < b[0]) return -1;
+    if (a[0] > b[0]) return 1;
+    if (a[2] < b[2]) return -1;
+    if (a[2] > b[2]) return 1;
+    return 0;
+});
 
     // Rebuild file
     const newContent =
@@ -180,8 +180,30 @@ function addShiftRecord(textFile, shiftObj) {
 // ============================================================
 function setBonus(textFile, driverID, date, newValue) {
     // TODO: Implement this function
-    
+      const content = fs.readFileSync(textFile, "utf-8").trim();
+    const lines = content.split("\n");
+    const header = lines[0];
+
+    let records = [];
+
+    // Parse existing records
+    for (let i = 1; i < lines.length; i++) {
+        const cols = lines[i].split(",");
+        records.push(cols);
+        if (cols[0]===driverID && cols[2]===date){
+            cols[9]=newValue.toString();
+        }
+
+            const newContent =
+        header + "\n" +
+        records.map(r => r.join(",")).join("\n");
+
+    fs.writeFileSync(textFile, newContent);
 }
+    }
+
+    
+
 
 // ============================================================
 // Function 7: countBonusPerMonth(textFile, driverID, month)
