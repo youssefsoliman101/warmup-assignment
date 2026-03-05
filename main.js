@@ -9,6 +9,10 @@ function parseTimeToSeconds(timeStr) {
     return hours * 3600 + m * 60 + s;
 }
 
+function parseDurationToSeconds(dur) {
+    const [h, m, s] = dur.trim().split(":").map(Number);
+    return h * 3600 + m * 60 + s;
+}
 
 function formatDuration(totalSeconds) {
     const h = Math.floor(totalSeconds / 3600);       
@@ -175,28 +179,23 @@ function addShiftRecord(textFile, shiftObj) {
 // Returns: nothing (void)
 // ============================================================
 function setBonus(textFile, driverID, date, newValue) {
-    // TODO: Implement this function
-      const content = fs.readFileSync(textFile, "utf-8").trim();
+    const content = fs.readFileSync(textFile, "utf-8").trim();
     const lines = content.split("\n");
     const header = lines[0];
-
     let records = [];
 
-    // Parse existing records
     for (let i = 1; i < lines.length; i++) {
         const cols = lines[i].split(",");
-        records.push(cols);
-        if (cols[0]===driverID && cols[2]===date){
-            cols[9]=newValue.toString();
+        if (cols[0] === driverID && cols[2] === date) {
+            cols[9] = newValue.toString();
         }
+        records.push(cols);
+    }
 
-            const newContent =
-        header + "\n" +
-        records.map(r => r.join(",")).join("\n");
-
+    const newContent = header + "\n" + records.map(r => r.join(",")).join("\n");
     fs.writeFileSync(textFile, newContent);
 }
-    }
+    
 
     
 
@@ -218,7 +217,6 @@ function countBonusPerMonth(textFile, driverID, month) {
     let bonusCount = 0;
     let driverFound = false;
 
-    console.log("Month input:", month);
     // Parse existing records
     for (let i = 1; i < lines.length; i++) {
         const cols = lines[i].split(",");
@@ -257,6 +255,7 @@ function getTotalActiveHoursPerMonth(textFile, driverID, month) {
         const date = cols[2];
         const activeTime = cols[7];
 
+        // extract month from date
         const parts = date.split("-");
         const recordMonth = Number(parts[1]);
 
@@ -266,8 +265,12 @@ function getTotalActiveHoursPerMonth(textFile, driverID, month) {
         }
     }
 
-    return formatDuration(totalSeconds);
+   const h = Math.floor(totalSeconds / 3600);
+const m = Math.floor((totalSeconds % 3600) / 60);
+const s = totalSeconds % 60;
+return String(h) + ":" + String(m).padStart(2,"0") + ":" + String(s).padStart(2,"0");
 }
+
 // ============================================================
 // Function 9: getRequiredHoursPerMonth(textFile, rateFile, bonusCount, driverID, month)
 // textFile: (typeof string) path to shifts text file
@@ -278,7 +281,63 @@ function getTotalActiveHoursPerMonth(textFile, driverID, month) {
 // Returns: string formatted as hhh:mm:ss
 // ============================================================
 function getRequiredHoursPerMonth(textFile, rateFile, bonusCount, driverID, month) {
-    // TODO: Implement this function
+
+    const shiftcontent = fs.readFileSync(textFile, "utf-8").trim();
+    const ratecontent = fs.readFileSync(rateFile, "utf-8").trim();
+
+    const Shiftlines = shiftcontent.split("\n");
+    const Ratelines = ratecontent.split("\n");
+
+    let requiredSeconds = 0;
+    let dayOff = "";
+
+    const days = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+
+    for (let i = 0; i < Ratelines.length; i++) {
+        const cols = Ratelines[i].split(",");
+        if (cols[0] === driverID) {
+            dayOff = cols[1];
+        }
+    }
+
+    for (let i = 1; i < Shiftlines.length; i++) {
+        const cols = Shiftlines[i].split(",");
+
+        const recordDriver = cols[0];
+        const date = cols[2];
+
+        const parts = date.split("-");
+        const recordMonth = Number(parts[1]);
+        const day = Number(parts[2]);
+
+        if (recordDriver === driverID && recordMonth === month) {
+
+            const d = new Date(date);
+            const dayName = days[d.getDay()];
+
+            // skip if driver worked on their day off
+            if (dayName === dayOff) continue;
+
+          // Eid rule
+        if (recordMonth === 4 && day >= 10 && day <= 30) {
+            requiredSeconds += 6 * 3600;
+        } else {
+            requiredSeconds += (8 * 3600) + (24 * 60); 
+        }
+    }
+}
+
+// bonus reduction
+requiredSeconds -= bonusCount * (2 * 3600);
+if (requiredSeconds < 0) requiredSeconds = 0;
+
+const hours = Math.floor(requiredSeconds / 3600);
+const minutes = Math.floor((requiredSeconds % 3600) / 60);
+const seconds = requiredSeconds % 60;
+
+return String(hours) + ":" +
+       String(minutes).padStart(2, "0") + ":" +
+       String(seconds).padStart(2, "0");
 }
 
 // ============================================================
@@ -291,7 +350,49 @@ function getRequiredHoursPerMonth(textFile, rateFile, bonusCount, driverID, mont
 // ============================================================
 function getNetPay(driverID, actualHours, requiredHours, rateFile) {
     // TODO: Implement this function
+    const ratecontent = fs.readFileSync(rateFile, "utf-8").trim();
+    const Ratelines = ratecontent.split("\n");
+
+    let basePay = 0;
+    let tier = 0;
+    for (let i = 0; i < Ratelines.length; i++) {
+        const cols = Ratelines[i].split(",");
+        if (cols[0] === driverID) {
+            basePay = parseInt(cols[2]);
+            tier = parseInt(cols[3]);
+            break;
+        }
+    } 
+        let allowedMissedHours;
+    switch (tier) {
+        case 1: allowedMissedHours = 50; break;
+        case 2: allowedMissedHours = 20; break;
+        case 3: allowedMissedHours = 10; break;
+        default: allowedMissedHours = 3;
+    }
+
+    const actualSeconds = parseDurationToSeconds(actualHours);
+    const requiredSeconds = parseDurationToSeconds(requiredHours);
+
+    if (actualSeconds >=requiredSeconds)
+         return basePay;
+
+    const missingHours = (requiredSeconds-actualSeconds) / 3600;
+    const chargedMissed = missingHours-allowedMissedHours;
+
+    if (chargedMissed <= 0)
+        return basePay;
+
+    const chargedMissedFullHours = Math.floor(chargedMissed);
+    const deductionRPH = Math.floor(basePay / 185);
+    const salaryDeduction = chargedMissedFullHours * deductionRPH;
+
+    return basePay - salaryDeduction;
 }
+
+
+
+
 
 module.exports = {
     getShiftDuration,
