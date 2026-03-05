@@ -9,10 +9,6 @@ function parseTimeToSeconds(timeStr) {
     return hours * 3600 + m * 60 + s;
 }
 
-function parseDurationToSeconds(dur) {
-    const [h, m, s] = dur.trim().split(":").map(Number);
-    return h * 3600 + m * 60 + s;
-}
 
 function formatDuration(totalSeconds) {
     const h = Math.floor(totalSeconds / 3600);       
@@ -214,6 +210,31 @@ function setBonus(textFile, driverID, date, newValue) {
 // ============================================================
 function countBonusPerMonth(textFile, driverID, month) {
     // TODO: Implement this function
+    const content = fs.readFileSync(textFile, "utf-8").trim();
+    const lines = content.split("\n");
+    const header = lines[0];
+
+    let records = [];
+    let bonusCount = 0;
+    let driverFound = false;
+
+    console.log("Month input:", month);
+    // Parse existing records
+    for (let i = 1; i < lines.length; i++) {
+        const cols = lines[i].split(",");
+        records.push(cols);
+        if (cols[0] === driverID) {
+            driverFound = true;
+            const recordMonth = cols[2].split("-")[1];
+            if (parseInt(recordMonth) === parseInt(month) && cols[9].toLowerCase() === "true") {
+                bonusCount++;
+            }
+        }
+    }
+    
+    return driverFound ? bonusCount : -1;
+
+
 }
 
 // ============================================================
@@ -224,9 +245,29 @@ function countBonusPerMonth(textFile, driverID, month) {
 // Returns: string formatted as hhh:mm:ss
 // ============================================================
 function getTotalActiveHoursPerMonth(textFile, driverID, month) {
-    // TODO: Implement this function
-}
+    const content = fs.readFileSync(textFile, "utf-8").trim();
+    const lines = content.split("\n");
 
+    let totalSeconds = 0;
+
+    for (let i = 1; i < lines.length; i++) {
+        const cols = lines[i].split(",");
+
+        const recordDriverID = cols[0];
+        const date = cols[2];
+        const activeTime = cols[7];
+
+        const parts = date.split("-");
+        const recordMonth = Number(parts[1]);
+
+        if (recordDriverID === driverID && recordMonth === month) {
+            const seconds = parseDurationToSeconds(activeTime);
+            totalSeconds += seconds;
+        }
+    }
+
+    return formatDuration(totalSeconds);
+}
 // ============================================================
 // Function 9: getRequiredHoursPerMonth(textFile, rateFile, bonusCount, driverID, month)
 // textFile: (typeof string) path to shifts text file
