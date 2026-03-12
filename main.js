@@ -99,25 +99,28 @@ function metQuota(date, activeTime) {
 // Returns: object with 10 properties or empty object {}
 // ============================================================
 function addShiftRecord(textFile, shiftObj) {
-    // TODO: Implement this function
-      const content = fs.readFileSync(textFile, "utf-8").trim();
-    const lines = content.split("\n");
-    const header = lines[0];
+    let lines;
+    if (!fs.existsSync(textFile)) {
+        lines = ["DriverID,DriverName,Date,StartTime,EndTime,ShiftDuration,IdleTime,ActiveTime,MetQuota,HasBonus"];
+    } else {
+        const content = fs.readFileSync(textFile, "utf-8").trim();
+        lines = content.split("\n");
+    }
 
+    const header = lines[0];
     let records = [];
 
-    // Parse existing records
     for (let i = 1; i < lines.length; i++) {
-        const cols = lines[i].split(",");
-        records.push(cols);
+        if (lines[i].trim() === "") continue;
+        records.push(lines[i].split(","));
     }
 
-  for (let i = 0; i < records.length; i++) {
-    if (records[i][0] === shiftObj.driverID &&
-        records[i][2] === shiftObj.date) {
-        return {};
+    // Check duplicate
+    for (let i = 0; i < records.length; i++) {
+        if (records[i][0] === shiftObj.driverID && records[i][2] === shiftObj.date) {
+            return {};
+        }
     }
-}
 
     // Calculate derived fields
     const shiftDuration = getShiftDuration(shiftObj.startTime, shiftObj.endTime);
@@ -139,36 +142,45 @@ function addShiftRecord(textFile, shiftObj) {
         hasBonus
     ];
 
-    records.push(newRecord);
+    // Find last occurrence of this driverID
+    let lastIndex = -1;
+    for (let i = 0; i < records.length; i++) {
+        if (records[i][0] === shiftObj.driverID) {
+            lastIndex = i;
+        }
+    }
 
-  records.sort((a, b) => {
-    if (a[0] < b[0]) return -1;
-    if (a[0] > b[0]) return 1;
-    if (a[2] < b[2]) return -1;
-    if (a[2] > b[2]) return 1;
-    return 0;
-});
+    // Insert after last occurrence, or append at end if not found
+    let newRecords = [];
+    if (lastIndex === -1) {
+        newRecords = records;
+        newRecords.push(newRecord);
+    } else {
+        for (let i = 0; i < records.length; i++) {
+            newRecords.push(records[i]);
+            if (i === lastIndex) {
+                newRecords.push(newRecord);
+            }
+        }
+    }
 
-    // Rebuild file
-    const newContent =
-        header + "\n" +
-        records.map(r => r.join(",")).join("\n");
-
+    const newContent = header + "\n" + newRecords.map(r => r.join(",")).join("\n");
     fs.writeFileSync(textFile, newContent);
 
     return {
-    driverID: shiftObj.driverID,
-    driverName: shiftObj.driverName,
-    date: shiftObj.date,
-    startTime: shiftObj.startTime,
-    endTime: shiftObj.endTime,
-    shiftDuration: shiftDuration,
-    idleTime: idleTime,
-    activeTime: activeTime,
-    metQuota: metQuotaValue,
-    hasBonus: hasBonus
-};
+        driverID: shiftObj.driverID,
+        driverName: shiftObj.driverName,
+        date: shiftObj.date,
+        startTime: shiftObj.startTime,
+        endTime: shiftObj.endTime,
+        shiftDuration: shiftDuration,
+        idleTime: idleTime,
+        activeTime: activeTime,
+        metQuota: metQuotaValue,
+        hasBonus: hasBonus
+    };
 }
+
 
 // ============================================================
 // Function 6: setBonus(textFile, driverID, date, newValue)
